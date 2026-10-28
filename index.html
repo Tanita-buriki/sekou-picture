@@ -745,7 +745,7 @@ async function renderPage(p, pages){
     if(!it) continue;
     const top = ROW_TOPS[r];
     // 写真（枠の中に全体が収まるように表示）
-    fillMm(c, '#f4f4f4', 12, top, 106, 80);
+    fillMm(c, '#fff', 12, top, 106, 80);
     const img = new Image(); img.src = fullUrl(it.photoId); await img.decode();
     const k = Math.min(106 / img.naturalWidth, 80 / img.naturalHeight);
     const dw = img.naturalWidth * k, dh = img.naturalHeight * k;
@@ -754,7 +754,6 @@ async function renderPage(p, pages){
 
     // 右側の記入欄
     const x0 = 126, x1 = 195, cx = (x0 + x1) / 2;
-    fillMm(c, '#f1f1f1', 123, top, 75, 80);
     c.fillStyle = '#000';
     c.font = `700 ${9 * 200 / 72}px ${FONT}`;
     const lw = c.measureText('NO.').width / K;
