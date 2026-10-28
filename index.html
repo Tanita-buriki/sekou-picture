@@ -105,37 +105,12 @@ input,textarea{font:inherit;color:inherit}
 #printbar{position:fixed;top:0;left:0;right:0;z-index:70;display:flex;align-items:center;gap:8px;padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top));background:var(--main);color:#fff}
 #printbar .back{min-height:44px;min-width:64px;border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff;border-radius:8px}
 #printbar .ttl{flex:1;font-size:13px;line-height:1.4}
-#printbar .btn{min-height:44px}
+#printbar .btn{min-height:44px;padding:0 12px}
 
-/* ===== 印刷用ページ（A4縦・1ページ3枚） ===== */
-#printRoot{position:absolute;left:-10000px;top:0;width:210mm}
+/* ===== プレビュー（出力するPDFと同じ画像を表示） ===== */
 body.previewing{overflow:hidden}
-body.previewing #printRoot{position:fixed;left:0;right:0;bottom:0;top:calc(60px + env(safe-area-inset-top));width:auto;overflow:auto;background:#7b838a;z-index:65;padding:10px 0}
-body.previewing #printRoot .page{zoom:var(--z,1);margin:0 auto 12px;box-shadow:0 2px 8px rgba(0,0,0,.4)}
-
-.page{width:210mm;height:296mm;padding:10mm 12mm 6mm;background:#fff;color:#000;display:flex;flex-direction:column;overflow:hidden;break-after:page;page-break-after:always}
-.page:last-child{break-after:auto;page-break-after:auto}
-.ph{display:flex;justify-content:space-between;align-items:flex-end;height:9mm;padding-bottom:1.5mm;border-bottom:.4mm solid #000;font-size:10.5pt}
-.ph .pn{font-weight:700;max-width:130mm;white-space:nowrap;overflow:hidden}
-.ph .st{font-size:9pt}
-.rows{flex:1;display:flex;flex-direction:column;justify-content:space-between;padding:5mm 0 3mm}
-.prow{display:flex;gap:5mm;height:80mm}
-.pphoto{width:106mm;height:80mm;flex:none;background:#f4f4f4;border:.2mm solid #bbb;display:flex;align-items:center;justify-content:center;overflow:hidden}
-.pphoto img{width:100%;height:100%;object-fit:contain;display:block}
-.pinfo{flex:1;min-width:0;height:80mm;background:#f1f1f1;padding:2mm 3mm;display:flex;flex-direction:column;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.pno{display:flex;align-items:flex-end;height:9mm;font-size:9pt;font-weight:700}
-.pno span{flex:1;margin-left:1.5mm;border-bottom:.3mm solid #333;text-align:center;font-size:11pt;line-height:6mm}
-.pkind{height:10mm;margin-top:1mm;border-bottom:.6mm solid #222;text-align:center;font-weight:700;font-size:13pt;line-height:10mm;white-space:nowrap;overflow:hidden}
-.pln{height:8.4mm;border-bottom:.3mm dotted #555;text-align:center;font-size:10.5pt;line-height:8.4mm;white-space:nowrap;overflow:hidden}
-.pf{height:6mm;text-align:center;font-size:9pt;line-height:6mm}
-
-@page{size:A4 portrait;margin:0}
-@media print{
-  html,body{background:#fff;height:auto}
-  body>*:not(#printRoot){display:none!important}
-  #printRoot,body.previewing #printRoot{position:static!important;width:auto!important;overflow:visible!important;background:none!important;padding:0!important}
-  #printRoot .page,body.previewing #printRoot .page{zoom:1!important;margin:0!important;box-shadow:none!important}
-}
+#pvPages{position:fixed;left:0;right:0;bottom:0;top:calc(60px + env(safe-area-inset-top));z-index:65;overflow:auto;background:#7b838a;padding:10px 0}
+#pvPages img{display:block;width:min(calc(100% - 16px),760px);height:auto;margin:0 auto 12px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4)}
 </style>
 </head>
 <body>
@@ -167,7 +142,7 @@ body.previewing #printRoot .page{zoom:var(--z,1);margin:0 auto 12px;box-shadow:0
   <div class="bar">
     <button class="btn primary cam" id="addCam">📷 撮影して追加</button>
     <button class="btn" id="addAlbum">🖼 アルバム</button>
-    <button class="btn accent" id="openPreview">🖨 印刷</button>
+    <button class="btn accent" id="openPreview">📄 PDF</button>
   </div>
 </div>
 
@@ -249,9 +224,10 @@ body.previewing #printRoot .page{zoom:var(--z,1);margin:0 auto 12px;box-shadow:0
 <div id="printbar" hidden>
   <button class="back" id="pvBack">‹ 戻る</button>
   <div class="ttl" id="pvInfo"></div>
-  <button class="btn accent" id="pvPrint">印刷 / PDF保存</button>
+  <button class="btn" id="pvShare" hidden>共有</button>
+  <button class="btn accent" id="pvSave">PDF保存</button>
 </div>
-<div id="printRoot"></div>
+<div id="pvPages" hidden></div>
 
 <div id="busy" hidden><span id="busyMsg">処理中…</span></div>
 <div id="toast" hidden></div>
@@ -267,7 +243,7 @@ body.previewing #printRoot .page{zoom:var(--z,1);margin:0 auto 12px;box-shadow:0
    施工写真台帳
    ・台帳(ledgers)と写真(photos)をブラウザ内のIndexedDBに保存
    ・NO.は並び順から自動採番（挿入・並べ替えで自動的に振り直し）
-   ・印刷は A4縦・1ページ3枚
+   ・PDFは A4縦・1ページ3枚（アプリ内で画像として描いてPDF化）
    ============================================================ */
 const LINES = 6;          // 内容の最大行数
 const PER_PAGE = 3;       // 1ページあたりの写真数
@@ -459,6 +435,11 @@ async function deleteLedger(l){
 }
 
 /* ---------- 書き出し・読み込み ---------- */
+function saveFile(blob, fname){
+  const a = h('a', {href:URL.createObjectURL(blob), download:fname});
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+}
 function blobToDataURL(b){
   return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
 }
@@ -476,11 +457,7 @@ async function exportLedger(l){
       first = false;
     }
     parts.push('}}');
-    const blob = new Blob(parts, {type:'application/json'});
-    const fname = ((l.name || '台帳').replace(/[\\/:*?"<>|]/g, '_')) + '_写真台帳.json';
-    const a = h('a', {href:URL.createObjectURL(blob), download:fname});
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+    saveFile(new Blob(parts, {type:'application/json'}), ((l.name || '台帳').replace(/[\\/:*?"<>|]/g, '_')) + '_写真台帳.json');
     toast('ファイルに書き出しました');
   }catch(e){
     alert('書き出しに失敗しました。\n' + e);
@@ -726,59 +703,149 @@ $('eDel').onclick = async () => {
   closeTop();
 };
 
-/* ---------- プレビュー・印刷 ---------- */
-function buildPrint(){
-  const items = cur.items;
-  const pages = Math.max(1, Math.ceil(items.length / PER_PAGE));
-  const root = $('printRoot');
-  const els = [];
-  for(let p = 0; p < pages; p++){
-    const rows = [];
-    for(let r = 0; r < PER_PAGE; r++){
-      const i = p * PER_PAGE + r, it = items[i];
-      if(!it) continue;
-      rows.push(h('div', {class:'prow'},
-        h('div', {class:'pphoto'}, h('img', {src:fullUrl(it.photoId), alt:''})),
-        h('div', {class:'pinfo'},
-          h('div', {class:'pno'}, 'NO.', h('span', {}, String(i + 1))),
-          h('div', {class:'pkind fit'}, it.kind || ''),
-          ...Array.from({length:LINES}, (_, k) => h('div', {class:'pln fit'}, it.lines[k] || '')))));
-    }
-    els.push(h('section', {class:'page'},
-      h('div', {class:'ph'}, h('span', {class:'pn'}, cur.name || ''), h('span', {class:'st'}, '施工写真台帳')),
-      h('div', {class:'rows'}, rows),
-      h('div', {class:'pf'}, `${p + 1} / ${pages}`)));
-  }
-  root.replaceChildren(...els);
-  // 1行に収まらない文字は、はみ出さないよう文字サイズを小さくする
-  for(const el of root.querySelectorAll('.fit')){
-    let fs = parseFloat(getComputedStyle(el).fontSize);
-    while(el.scrollWidth > el.clientWidth + 0.5 && fs > 6){ fs -= 0.5; el.style.fontSize = fs + 'px'; }
-  }
+/* ---------- PDF出力（A4縦・1ページ3枚） ----------
+   ブラウザの印刷機能は余白・URL・日時が付いたり縮小されたりするため使わず、
+   ページを画像として描いてPDFにまとめる。 */
+const PW = 210, PH = 297;           // A4（mm）
+const K = 200 / 25.4;               // 1mmあたりのpx（200dpi）
+const FONT = '"Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo","Noto Sans CJK JP",sans-serif';
+const ROW_TOPS = [24, 113, 202];    // 各段の上端（mm）
+const FOOTER_NAME = 'TANIGUCHI metal plate Ltd';
+
+// 文字を描く。maxMm に収まらないときは文字サイズを小さくする
+function drawText(c, text, x, y, o){
+  let pt = o.pt;
+  do{
+    c.font = `${o.weight || '400'} ${pt * 200 / 72}px ${FONT}`;
+    if(!o.max || c.measureText(text).width <= o.max * K) break;
+    pt -= 0.5;
+  }while(pt > 6);
+  c.textAlign = o.align || 'left';
+  c.textBaseline = o.base || 'alphabetic';
+  c.fillText(text, x * K, y * K);
 }
-function openPreview(){
+function fillMm(c, color, x, y, w, h){ c.fillStyle = color; c.fillRect(x * K, y * K, w * K, h * K); }
+
+async function renderPage(p, pages){
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(PW * K); cv.height = Math.round(PH * K);
+  const c = cv.getContext('2d');
+  c.imageSmoothingQuality = 'high';
+  fillMm(c, '#fff', 0, 0, PW, PH);
+
+  // ヘッダー（工事名）
+  c.fillStyle = '#000';
+  drawText(c, cur.name || '', 12, 17, {pt:10.5, weight:'700', max:130});
+  drawText(c, '施工写真台帳', 198, 17, {pt:9, align:'right'});
+  fillMm(c, '#000', 12, 18.8, 186, 0.4);
+
+  // 写真3段
+  for(let r = 0; r < PER_PAGE; r++){
+    const i = p * PER_PAGE + r, it = cur.items[i];
+    if(!it) continue;
+    const top = ROW_TOPS[r];
+    // 写真（枠の中に全体が収まるように表示）
+    fillMm(c, '#f4f4f4', 12, top, 106, 80);
+    const img = new Image(); img.src = fullUrl(it.photoId); await img.decode();
+    const k = Math.min(106 / img.naturalWidth, 80 / img.naturalHeight);
+    const dw = img.naturalWidth * k, dh = img.naturalHeight * k;
+    c.drawImage(img, (12 + (106 - dw) / 2) * K, (top + (80 - dh) / 2) * K, dw * K, dh * K);
+    c.strokeStyle = '#bbb'; c.lineWidth = 0.2 * K; c.strokeRect(12 * K, top * K, 106 * K, 80 * K);
+
+    // 右側の記入欄
+    const x0 = 126, x1 = 195, cx = (x0 + x1) / 2;
+    fillMm(c, '#f1f1f1', 123, top, 75, 80);
+    c.fillStyle = '#000';
+    c.font = `700 ${9 * 200 / 72}px ${FONT}`;
+    const lw = c.measureText('NO.').width / K;
+    drawText(c, 'NO.', x0, top + 10.2, {pt:9, weight:'700'});
+    fillMm(c, '#333', x0 + lw + 1.5, top + 10.7, x1 - x0 - lw - 1.5, 0.3);
+    drawText(c, String(i + 1), (x0 + lw + 1.5 + x1) / 2, top + 9.6, {pt:11, align:'center'});
+    drawText(c, it.kind || '', cx, top + 17, {pt:13, weight:'700', align:'center', base:'middle', max:69});
+    fillMm(c, '#222', x0, top + 21.4, x1 - x0, 0.6);
+    c.strokeStyle = '#555'; c.lineWidth = 0.3 * K; c.setLineDash([0.3 * K, 0.7 * K]);
+    for(let n = 0; n < LINES; n++){
+      const yb = top + 22 + 8.4 * (n + 1);
+      c.fillStyle = '#000';
+      drawText(c, it.lines[n] || '', cx, yb - 4.2, {pt:10.5, align:'center', base:'middle', max:69});
+      c.beginPath(); c.moveTo(x0 * K, (yb - 0.15) * K); c.lineTo(x1 * K, (yb - 0.15) * K); c.stroke();
+    }
+    c.setLineDash([]);
+  }
+
+  // フッター（ページ番号は中央、社名は右詰め）
+  c.fillStyle = '#000';
+  drawText(c, `${p + 1} / ${pages}`, PW / 2, 291, {pt:9, align:'center'});
+  drawText(c, FOOTER_NAME, 198, 291, {pt:9, align:'right'});
+
+  const blob = await canvasBlob(cv, 0.92);
+  return {blob, url:URL.createObjectURL(blob), bytes:new Uint8Array(await blob.arrayBuffer()), w:cv.width, h:cv.height};
+}
+
+// JPEG画像のページをPDFにまとめる
+function makePdf(pages){
+  const enc = new TextEncoder(), parts = [], offs = [];
+  let pos = 0;
+  const push = d => { const u = typeof d === 'string' ? enc.encode(d) : d; parts.push(u); pos += u.length; };
+  const obj = (n, body) => { offs[n] = pos; push(`${n} 0 obj\n${body}\nendobj\n`); };
+  const W = 595.28, H = 841.89;
+  push('%PDF-1.4\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + 3 * i} 0 R`).join(' ')}] /Count ${pages.length} >>`);
+  pages.forEach((pg, i) => {
+    const n = 3 + 3 * i, content = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+    obj(n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${n + 2} 0 R >> >> /Contents ${n + 1} 0 R >>`);
+    obj(n + 1, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+    offs[n + 2] = pos;
+    push(`${n + 2} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${pg.w} /Height ${pg.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.bytes.length} >>\nstream\n`);
+    push(pg.bytes);
+    push('\nendstream\nendobj\n');
+  });
+  const total = 3 + 3 * pages.length, xref = pos;
+  let x = `xref\n0 ${total}\n0000000000 65535 f \n`;
+  for(let k = 1; k < total; k++) x += String(offs[k]).padStart(10, '0') + ' 00000 n \n';
+  push(x + `trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob(parts, {type:'application/pdf'});
+}
+
+let pvList = [];   // プレビュー中のページ画像
+const pdfName = () => ((cur.name || '台帳').replace(/[\\/:*?"<>|]/g, '_')) + '_施工写真台帳.pdf';
+
+async function openPreview(){
   if(!cur.items.length){ toast('写真がありません'); return; }
-  buildPrint();
-  const z = Math.min(1.2, (window.innerWidth - 16) / (210 * 96 / 25.4));
-  $('printRoot').style.setProperty('--z', z);
-  $('pvInfo').innerHTML = `${cur.items.length}枚 ・ ${Math.ceil(cur.items.length / PER_PAGE)}ページ<br>A4縦・1ページ${PER_PAGE}枚`;
+  busy(true, 'PDFを作成中…');
+  try{
+    const pages = Math.ceil(cur.items.length / PER_PAGE);
+    pvList = [];
+    for(let p = 0; p < pages; p++) pvList.push(await renderPage(p, pages));
+  }catch(err){
+    alert('PDFの作成に失敗しました。\n' + err);
+    return;
+  }finally{ busy(false); }
+  $('pvPages').replaceChildren(...pvList.map(pg => h('img', {src:pg.url, alt:''})));
+  $('pvPages').hidden = false; $('pvPages').scrollTop = 0;
+  $('pvInfo').innerHTML = `${cur.items.length}枚 ・ ${pvList.length}ページ<br>A4縦・1ページ${PER_PAGE}枚`;
   document.body.classList.add('previewing');
   $('printbar').hidden = false;
-  window.scrollTo(0, 0);
   pushLayer(() => {
     document.body.classList.remove('previewing');
-    $('printbar').hidden = true;
-    $('printRoot').replaceChildren();
+    $('printbar').hidden = true; $('pvPages').hidden = true;
+    $('pvPages').replaceChildren();
+    pvList.forEach(pg => URL.revokeObjectURL(pg.url));
+    pvList = [];
   });
 }
 $('openPreview').onclick = openPreview;
 $('pvBack').onclick = closeTop;
-$('pvPrint').onclick = () => {
-  const t = document.title;
-  document.title = `${cur.name || '台帳'}_施工写真台帳`;
-  window.addEventListener('afterprint', () => { document.title = t; }, {once:true});
-  window.print();
+$('pvSave').onclick = () => { saveFile(makePdf(pvList), pdfName()); toast('PDFを保存しました'); };
+$('pvShare').onclick = async () => {
+  try{ await navigator.share({files:[new File([makePdf(pvList)], pdfName(), {type:'application/pdf'})], title:cur.name}); }
+  catch(err){ if(err.name !== 'AbortError') alert('共有できませんでした。「PDF保存」を使ってください。'); }
 };
+// 端末の「共有」（印刷・ドライブ保存など）が使えるときだけ共有ボタンを出す
+try{
+  if(navigator.canShare && navigator.canShare({files:[new File(['x'], 'a.pdf', {type:'application/pdf'})]})) $('pvShare').hidden = false;
+}catch(e){}
 
 /* ---------- 起動 ---------- */
 (async function init(){
