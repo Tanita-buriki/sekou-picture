@@ -731,7 +731,7 @@ async function renderPage(p, pages){
   cv.width = Math.round(PW * K); cv.height = Math.round(PH * K);
   const c = cv.getContext('2d');
   c.imageSmoothingQuality = 'high';
-  fillMm(c, '#fff', 0, 0, PW, PH);
+  c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);   // 端の1pxまで白で塗る
 
   // ヘッダー（工事名）
   c.fillStyle = '#000';
